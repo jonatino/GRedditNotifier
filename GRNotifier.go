@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mmcdole/gofeed"
+	"github.com/xconstruct/go-pushbullet"
 	"net/http"
 	"os"
 	"runtime"
@@ -11,17 +12,15 @@ import (
 )
 
 type SubReddit struct {
-	URL         string `json:"url"`
-	IFTTTApiKey string `json:"ifttt_api_key"`
-	Email       string `json:"email"`
-	PhoneNumber string `json:"phonenumber"`
+	URL string `json:"url"`
 }
 
 type Config struct {
-	BaseURL    string      `json:"baseurl"`
-	Interval   int         `json:"interval"`
-	Username   string      `json:"username"`
-	SubReddits []SubReddit `json:"subreddits"`
+	BaseURL          string      `json:"baseurl"`
+	Interval         int         `json:"interval"`
+	Username         string      `json:"username"`
+	PushBulletApiKey string      `json:"pushbullet_api_key"`
+	SubReddits       []SubReddit `json:"subreddits"`
 }
 
 type Notification struct {
@@ -72,7 +71,7 @@ func parseRSSFeed(config Config, feed *gofeed.Feed) {
 				Time:      item.Updated,
 				URL:       item.Link,
 				Author:    config.BaseURL + item.Author.Name,
-				Subreddit: config.BaseURL + "/r/" + item.Categories[0],
+				Subreddit: "/r/" + item.Categories[0],
 			}
 
 			sendNotification(notification)
@@ -86,8 +85,32 @@ func parseRSSFeed(config Config, feed *gofeed.Feed) {
 	}
 }
 
+func LoadPushBulletDevice() *pushbullet.Device {
+	devices, e := pb.Devices()
+	if e != nil {
+		panic(e)
+	}
+
+	var device *pushbullet.Device
+	for _, dev := range devices {
+		if dev.Active == true {
+			device = dev
+			break
+		}
+	}
+
+	if device == nil {
+		fmt.Println("Could not find active device on PushBullet!")
+		os.Exit(2)
+	}
+
+	return device
+}
+
 var config = LoadConfig()
 var start = time.Now().Unix()
+var pb = pushbullet.New(config.PushBulletApiKey)
+var device = LoadPushBulletDevice()
 
 func main() {
 	fp := gofeed.NewParser()
@@ -113,5 +136,14 @@ func main() {
 }
 
 func sendNotification(n Notification) {
-	fmt.Println(n.Title + " - " + n.Time + " \n" + n.URL + " \n" + n.Author + " \n" + n.Subreddit + "\n")
+	body := n.Title + " - " + n.Time + " \n" + n.URL + " \n" + n.Author + " \n" + n.Subreddit + "\n"
+
+	fmt.Println(body)
+
+	e := pb.PushNote(device.Iden, "New "+n.Subreddit+" post!", body)
+
+	if e != nil {
+		panic(e)
+	}
+
 }
