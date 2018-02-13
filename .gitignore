@@ -7,6 +7,7 @@
 *.so
 *.dylib
 
+
 # Test binary, build with `go test -c`
 *.test
 
@@ -15,5 +16,6 @@
 
 # Goland IDE
 .idea
+bin
 
 GRedditNotifier.json
