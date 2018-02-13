@@ -25,7 +25,7 @@ type SubReddit struct {
 
 func LoadConfig() Config {
 	var config Config
-	configFile, err := os.Open("./GNotifierConfig.json")
+	configFile, err := os.Open("./GRedditNotifier.json")
 	defer configFile.Close()
 	if err != nil {
 		fmt.Println(err.Error())
