@@ -1,0 +1,10 @@
+{
+  "baseurl": "https://reddit.com",
+  "interval": 30,
+  "username": "YOUR_NAME_HERE",
+  "subreddits": [
+    {
+      "url": "YOUR_FAVORITE_SUBREDDIT"
+    }
+  ]
+}
