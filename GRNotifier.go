@@ -1,12 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/mmcdole/gofeed"
-	"time"
 	"net/http"
 	"os"
-	"encoding/json"
+	"runtime"
+	"time"
 )
 
 type SubReddit struct {
@@ -36,7 +37,7 @@ type UserAgentTransport struct {
 }
 
 func (c *UserAgentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Set("User-Agent", "windows:io.anglur.GRNotifier:1.0 (by /u/Tiflotin)")
+	r.Header.Set("User-Agent", runtime.GOOS+":io.anglur.GRNotifier:1.0 (by /u/"+config.Username+")")
 	return c.RoundTripper.RoundTrip(r)
 }
 
@@ -52,12 +53,17 @@ func LoadConfig() Config {
 	return config
 }
 
-func parseRSSFeed(config Config, start int64, feed *gofeed.Feed) bool {
-	//TODO possible to pass start by pointer so i don't have to return value?
+func parseRSSFeed(config Config, feed *gofeed.Feed) {
 	reset := false
 
 	for _, item := range feed.Items {
-		t, _ := time.Parse(time.RFC3339, item.Updated)
+		t, e := time.Parse(time.RFC3339, item.Updated)
+
+		if e != nil {
+			fmt.Println(e)
+			continue
+		}
+
 		item.Updated = t.String()
 
 		if start < t.Unix() {
@@ -75,34 +81,35 @@ func parseRSSFeed(config Config, start int64, feed *gofeed.Feed) bool {
 		}
 	}
 
-	return reset
+	if reset {
+		start = time.Now().Unix()
+	}
 }
 
-func main() {
-	config := LoadConfig()
-	start := time.Now().Unix() - 200000
+var config = LoadConfig()
+var start = time.Now().Unix()
 
+func main() {
 	fp := gofeed.NewParser()
 	fp.Client = &http.Client{
 		Transport: &UserAgentTransport{http.DefaultTransport},
 	}
 
-	reset := false
+	for {
+		for _, subreddit := range config.SubReddits {
+			feed, e := fp.ParseURL(config.BaseURL + "/r/" + subreddit.URL + "/new/.rss")
 
-	for _, subreddit := range config.SubReddits {
-		feed, e := fp.ParseURL(config.BaseURL + "/r/" + subreddit.URL + "/new/.rss")
+			if e != nil {
+				fmt.Println(e)
+				continue
+			}
 
-		if e != nil {
-			fmt.Println(e)
+			parseRSSFeed(config, feed)
 		}
 
-		reset = parseRSSFeed(config, start, feed)
+		fmt.Printf("Sleeping for %d seconds...\n", config.Interval)
+		time.Sleep(time.Duration(config.Interval) * time.Second)
 	}
-
-	if reset {
-		start = time.Now().Unix()
-	}
-
 }
 
 func sendNotification(n Notification) {
