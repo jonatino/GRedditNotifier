@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-type SubReddit struct {
-	URL string `json:"url"`
-}
-
 type Config struct {
 	BaseURL          string      `json:"baseurl"`
 	Interval         int         `json:"interval"`
@@ -23,21 +19,8 @@ type Config struct {
 	SubReddits       []SubReddit `json:"subreddits"`
 }
 
-type Notification struct {
-	Title     string
-	Time      string
-	URL       string
-	Author    string
-	Subreddit string
-}
-
-type UserAgentTransport struct {
-	http.RoundTripper
-}
-
-func (c *UserAgentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Set("User-Agent", runtime.GOOS+":io.anglur.GRNotifier:1.0 (by /u/"+config.Username+")")
-	return c.RoundTripper.RoundTrip(r)
+type SubReddit struct {
+	URL string `json:"url"`
 }
 
 func LoadConfig() Config {
@@ -50,39 +33,6 @@ func LoadConfig() Config {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 	return config
-}
-
-func parseRSSFeed(config Config, feed *gofeed.Feed) {
-	reset := false
-
-	for _, item := range feed.Items {
-		t, e := time.Parse(time.RFC3339, item.Updated)
-
-		if e != nil {
-			fmt.Println(e)
-			continue
-		}
-
-		item.Updated = t.String()
-
-		if start < t.Unix() {
-			notification := Notification{
-				Title:     item.Title,
-				Time:      item.Updated,
-				URL:       item.Link,
-				Author:    config.BaseURL + item.Author.Name,
-				Subreddit: "/r/" + item.Categories[0],
-			}
-
-			sendNotification(notification)
-
-			reset = true
-		}
-	}
-
-	if reset {
-		start = time.Now().Unix()
-	}
 }
 
 func LoadPushBulletDevice() *pushbullet.Device {
@@ -107,10 +57,72 @@ func LoadPushBulletDevice() *pushbullet.Device {
 	return device
 }
 
-var config = LoadConfig()
+type Notification struct {
+	Title     string
+	Time      string
+	URL       string
+	Author    string
+	Subreddit string
+}
+
+func SendNotification(n Notification) {
+	body := n.Title + " - " + n.Time + " \n" + n.URL + " \n" + n.Author + " \n" + n.Subreddit + "\n"
+
+	fmt.Println(body)
+
+	e := pb.PushNote(device.Iden, "New "+n.Subreddit+" post!", body)
+
+	if e != nil {
+		panic(e)
+	}
+}
+
+type UserAgentTransport struct {
+	http.RoundTripper
+}
+
+func (c *UserAgentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r.Header.Set("User-Agent", runtime.GOOS+":io.anglur.GRNotifier:1.0 (by /u/"+config.Username+")")
+	return c.RoundTripper.RoundTrip(r)
+}
+
+func parseRSSFeed(config Config, feed *gofeed.Feed) {
+	reset := false
+
+	for _, item := range feed.Items {
+		t, e := time.Parse(time.RFC3339, item.Updated)
+
+		if e != nil {
+			fmt.Println(e)
+			continue
+		}
+
+		item.Updated = t.String()
+
+		if start < t.Unix() {
+			notification := Notification{
+				Title:     item.Title,
+				Time:      item.Updated,
+				URL:       item.Link,
+				Author:    config.BaseURL + item.Author.Name,
+				Subreddit: "/r/" + item.Categories[0],
+			}
+
+			SendNotification(notification)
+
+			reset = true
+		}
+	}
+
+	if reset {
+		start = time.Now().Unix()
+	}
+}
+
 var start = time.Now().Unix()
-var pb = pushbullet.New(config.PushBulletApiKey)
 var device = LoadPushBulletDevice()
+var config = LoadConfig()
+var pb = pushbullet.New(config.PushBulletApiKey)
 
 func main() {
 	fp := gofeed.NewParser()
@@ -133,17 +145,4 @@ func main() {
 		fmt.Printf("Sleeping for %d seconds...\n", config.Interval)
 		time.Sleep(time.Duration(config.Interval) * time.Second)
 	}
-}
-
-func sendNotification(n Notification) {
-	body := n.Title + " - " + n.Time + " \n" + n.URL + " \n" + n.Author + " \n" + n.Subreddit + "\n"
-
-	fmt.Println(body)
-
-	e := pb.PushNote(device.Iden, "New "+n.Subreddit+" post!", body)
-
-	if e != nil {
-		panic(e)
-	}
-
 }
